@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Focus Feed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Mono&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     CONFIG — edit CHANNELS and API_KEY below, not here
+     ============================================================ */
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #e8e8e8;
+    --text2: #888;
+    --text3: #555;
+    --red: #ff4444;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* ── Header ── */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(15,15,15,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 0.5px solid var(--border);
+    padding: 0 2rem;
+  }
+
+  .header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .logo-mark {
+    width: 26px; height: 18px;
+    background: var(--red);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .logo-mark::after {
+    content: '';
+    border-left: 8px solid white;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    margin-left: 2px;
+  }
+
+  .logo-text {
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .filter-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 5px 13px;
+    border-radius: 20px;
+    border: 0.5px solid var(--border2);
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.25); }
+  .filter-btn.active { background: var(--text); color: #0f0f0f; border-color: var(--text); }
+
+  .refresh-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 5px 13px;
+    border-radius: 20px;
+    border: 0.5px solid var(--border2);
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-left: 8px;
+  }
+  .refresh-btn:hover { color: var(--text); }
+  .refresh-btn.spinning { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Main layout ── */
+  .main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1.5rem 2rem 4rem;
+  }
+
+  /* ── Channel strip ── */
+  .channel-strip {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+  }
+
+  .ch-pill {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 0.5px solid var(--border);
+    background: var(--surface);
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .ch-pill:hover { border-color: var(--border2); color: var(--text); }
+  .ch-pill.active { border-color: rgba(255,255,255,0.3); color: var(--text); background: var(--surface2); }
+  .ch-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── Stats bar ── */
+  .stats-bar {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+    margin-bottom: 1.25rem;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .stats-bar em { color: var(--text2); font-style: normal; }
+  .cache-note { margin-left: auto; }
+
+  /* ── Video grid ── */
+  .video-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  /* ── Video card ── */
+  .video-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.15s, opacity 0.2s, transform 0.15s;
+  }
+  .video-card:hover { border-color: var(--border2); transform: translateY(-1px); }
+  .video-card.watched { opacity: 0.35; }
+  .video-card.watched:hover { opacity: 0.6; }
+
+  .thumb-wrap {
+    position: relative;
+    aspect-ratio: 16/9;
+    background: var(--surface2);
+    overflow: hidden;
+  }
+  .thumb-wrap img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.2s;
+  }
+  .video-card:hover .thumb-wrap img { transform: scale(1.02); }
+
+  .duration {
+    position: absolute;
+    bottom: 6px; right: 7px;
+    background: rgba(0,0,0,0.85);
+    color: #fff;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .watched-badge {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.7);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .video-card.watched .watched-badge { display: flex; }
+
+  .card-body { padding: 12px 14px 13px; }
+
+  .card-channel {
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    color: var(--text3);
+    margin-bottom: 5px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .card-ch-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+  .card-title {
+    font-size: 13.5px;
+    font-weight: 500;
+    line-height: 1.45;
+    color: var(--text);
+    margin-bottom: 10px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .card-date {
+    font-size: 11px;
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .mark-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 10px;
+    border: 0.5px solid var(--border2);
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mark-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.3); }
+
+  /* ── States ── */
+  .loading-state, .error-state, .empty-state {
+    grid-column: 1 / -1;
+    padding: 4rem 0;
+    text-align: center;
+    color: var(--text3);
+    font-size: 14px;
+    line-height: 1.8;
+  }
+  .error-state { color: #ff6b6b; }
+  .loading-dots span {
+    display: inline-block;
+    animation: blink 1.2s infinite;
+    font-size: 20px;
+    color: var(--text3);
+  }
+  .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
+
+  /* ── API key notice ── */
+  .key-notice {
+    background: #1a1500;
+    border: 0.5px solid #4a3800;
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    font-size: 13px;
+    color: #c8a84b;
+    line-height: 1.7;
+  }
+  .key-notice code {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    background: rgba(255,255,255,0.07);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  @media (max-width: 600px) {
+    .main { padding: 1rem 1rem 3rem; }
+    .header { padding: 0 1rem; }
+    .video-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── Modal ── */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0,0,0,0.92);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: 1.5rem;
+  }
+  .modal-backdrop.open { display: flex; }
+
+  .modal-inner {
+    width: 100%;
+    max-width: 960px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .modal-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.4;
+    flex: 1;
+  }
+
+  .modal-channel {
+    font-size: 12px;
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .modal-close {
+    background: none;
+    border: 0.5px solid var(--border2);
+    color: var(--text2);
+    font-size: 18px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+    line-height: 1;
+  }
+  .modal-close:hover { color: var(--text); border-color: rgba(255,255,255,0.3); }
+
+  .modal-player {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #000;
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .modal-player iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+  }
+
+  .modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text3);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .modal-watched-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .watched-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #4CAF50;
+    display: none;
+  }
+  .watched-dot.visible { display: block; }
+
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+  ✏️  CONFIGURATION — edit this section only
+  ============================================================ -->
+<script>
+const API_KEY = 'YOUR_API_KEY_HERE'; // ← paste your YouTube Data API v3 key here
+
+// Channel names are fetched automatically from YouTube — you can remove the name field entirely.
+// It's only used as a fallback if the API call fails.
+const CHANNELS = [
+  { id: 'UCHnyfMqiRRG1u-2MsSQLbXA', color: '#4CAF50' },
+  { id: 'UCYO_jab_esuFRV4b17AJtAw', color: '#5C7CFA' },
+  { id: 'UCNAf1k0yIjyGu3k9BwAg3lg', color: '#FF9800' },
+  { id: 'UCUyvQV2JsICeLZP4c_h40kA', color: '#E53935' },
+  { id: 'UCtYKe7-XbaDjpUwcU5x0bLg', color: '#00BCD4' },
+  { id: 'UCJkMlOu7faDgqh4PfzbpLdg', color: '#AB47BC' },
+  { id: 'UC4i_9WvfPRTuRWEaWyfKuFw', color: '#FF5252' },
+];
+
+const VIDEOS_PER_CHANNEL = 6;   // how many recent videos to fetch per channel
+const CACHE_MINUTES = 60;        // how long to cache results before re-fetching
+
+// Video player — change this to any Invidious instance if this one goes down
+// Options: https://yewtu.be  https://inv.nadeko.net  https://invidious.nerdvpn.de
+const PLAYER_BASE = 'https://yewtu.be';
+</script>
+<!-- ============================================================ -->
+
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-mark"></div>
+      <span class="logo-text">Focus Feed</span>
+    </div>
+    <div class="header-controls">
+      <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+      <button class="filter-btn" onclick="setFilter('unwatched', this)">Unwatched</button>
+      <button class="filter-btn" onclick="setFilter('watched', this)">Watched</button>
+      <button class="refresh-btn" onclick="hardRefresh(this)" title="Refresh feed">↻</button>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+  <div id="keyNotice"></div>
+  <div class="channel-strip" id="channelStrip"></div>
+  <div class="stats-bar" id="statsBar"></div>
+  <div class="video-grid" id="videoGrid">
+    <div class="loading-state">
+      <div class="loading-dots"><span>·</span><span>·</span><span>·</span></div>
+    </div>
+  </div>
+
+<div class="modal-backdrop" id="modalBackdrop" onclick="closeModal(event)">
+  <div class="modal-inner" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle"></div>
+        <div class="modal-channel" id="modalChannel"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-player" id="modalPlayer"></div>
+    <div class="modal-footer">
+      <div class="modal-watched-note">
+        <span class="watched-dot" id="watchedDot"></span>
+        <span id="watchedNote"></span>
+      </div>
+      <span id="modalDate"></span>
+    </div>
+  </div>
+</div>
+
+</main>
+
+
+<script>
+/* ── State ── */
+let allVideos = [];
+let watched = new Set(JSON.parse(localStorage.getItem('ff_watched') || '[]'));
+let activeChannel = 'all';
+let activeFilter = 'all';
+
+/* ── Helpers ── */
+function saveWatched() {
+  try { localStorage.setItem('ff_watched', JSON.stringify([...watched])); } catch(e) {}
+}
+
+function toggleWatched(id, e) {
+  e.stopPropagation();
+  watched.has(id) ? watched.delete(id) : watched.add(id);
+  saveWatched();
+  render();
+}
+
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function setChannel(id) {
+  activeChannel = id;
+  document.querySelectorAll('.ch-pill').forEach(p =>
+    p.classList.toggle('active', p.dataset.ch === id)
+  );
+  render();
+}
+
+function formatDate(isoString) {
+  const diff = Math.floor((Date.now() - new Date(isoString)) / 86400000);
+  if (diff === 0) return 'today';
+  if (diff === 1) return 'yesterday';
+  if (diff < 7) return diff + ' days ago';
+  const w = Math.floor(diff / 7);
+  return w === 1 ? '1 week ago' : w + ' weeks ago';
+}
+
+function formatDuration(iso) {
+  if (!iso) return '';
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return '';
+  const h = parseInt(m[1] || 0), min = parseInt(m[2] || 0), s = parseInt(m[3] || 0);
+  if (h > 0) return h + ':' + String(min).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  return min + ':' + String(s).padStart(2,'0');
+}
+
+function getChannel(id) {
+  return CHANNELS.find(c => c.id === id) || { name: id, color: '#888' };
+}
+
+/* ── Cache ── */
+const CACHE_KEY = 'ff_cache';
+
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { ts, videos, channelNames } = JSON.parse(raw);
+    if (Date.now() - ts < CACHE_MINUTES * 60 * 1000) {
+      if (channelNames) CHANNELS.forEach(c => { if (channelNames[c.id]) c.name = channelNames[c.id]; });
+      return videos;
+    }
+  } catch(e) {}
+  return null;
+}
+
+function saveCache(videos) {
+  const channelNames = {};
+  CHANNELS.forEach(c => { if (c.name) channelNames[c.id] = c.name; });
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), videos, channelNames })); } catch(e) {}
+}
+
+function clearCache() {
+  try { localStorage.removeItem(CACHE_KEY); } catch(e) {}
+}
+
+/* ── API ── */
+async function fetchChannelVideos(channel) {
+  // Step 1: get uploads playlist ID + real channel name from API
+  const chRes = await fetch(
+    `https://www.googleapis.com/youtube/v3/channels?part=contentDetails,snippet&id=${channel.id}&key=${API_KEY}`
+  );
+  const chData = await chRes.json();
+
+  if (chData.error) throw new Error(chData.error.message);
+
+  const item = chData.items?.[0];
+  if (!item) return [];
+
+  const resolvedName = item.snippet?.title || channel.name || channel.id;
+
+  const uploadsId = item.contentDetails?.relatedPlaylists?.uploads;
+  if (!uploadsId) return { name: resolvedName, videos: [] };
+
+  // Step 2: get recent video IDs from uploads playlist
+  const plRes = await fetch(
+    `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${uploadsId}&maxResults=${VIDEOS_PER_CHANNEL}&key=${API_KEY}`
+  );
+  const plData = await plRes.json();
+  if (plData.error) throw new Error(plData.error.message);
+
+  const items = plData.items || [];
+  const videoIds = items.map(i => i.snippet?.resourceId?.videoId).filter(Boolean);
+  if (!videoIds.length) return [];
+
+  // Step 3: get video details (duration)
+  const detRes = await fetch(
+    `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${videoIds.join(',')}&key=${API_KEY}`
+  );
+  const detData = await detRes.json();
+  if (detData.error) throw new Error(detData.error.message);
+
+  return { name: resolvedName, videos: (detData.items || []).map(v => ({
+    id: v.id,
+    channelId: channel.id,
+    channelName: resolvedName,
+    title: v.snippet.title,
+    thumb: v.snippet.thumbnails?.medium?.url || v.snippet.thumbnails?.default?.url,
+    publishedAt: v.snippet.publishedAt,
+    duration: formatDuration(v.contentDetails?.duration),
+  })) };
+}
+
+async function fetchAllVideos(force = false) {
+  if (API_KEY === 'YOUR_API_KEY_HERE') {
+    showKeyNotice();
+    renderGrid([]);
+    return;
+  }
+
+  if (!force) {
+    const cached = loadCache();
+    if (cached) {
+      allVideos = cached;
+      buildChannelStrip();
+      render();
+      updateCacheNote(true);
+      return;
+    }
+  }
+
+  renderLoading();
+
+  try {
+    const results = await Promise.allSettled(CHANNELS.map(fetchChannelVideos));
+    const videos = [];
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        CHANNELS[i].name = r.value.name;
+        videos.push(...r.value.videos);
+      } else {
+        console.warn('Failed to fetch', CHANNELS[i].id, r.reason);
+      }
+    });
+
+    // sort newest first
+    videos.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+    allVideos = videos;
+    saveCache(videos);
+    buildChannelStrip();
+    render();
+    updateCacheNote(false);
+  } catch(err) {
+    renderError(err.message);
+  }
+}
+
+async function hardRefresh(btn) {
+  btn.classList.add('spinning');
+  clearCache();
+  await fetchAllVideos(true);
+  btn.classList.remove('spinning');
+}
+
+/* ── UI builders ── */
+function showKeyNotice() {
+  document.getElementById('keyNotice').innerHTML = `
+    <div class="key-notice">
+      <strong>API key needed</strong> — open this file in a text editor and replace
+      <code>YOUR_API_KEY_HERE</code> with your YouTube Data API v3 key near the top of the file.
+      Save and reload.
+    </div>`;
+}
+
+function getChannelName(channelId) {
+  const fromVideos = allVideos.find(v => v.channelId === channelId);
+  if (fromVideos && fromVideos.channelName) return fromVideos.channelName;
+  const ch = CHANNELS.find(c => c.id === channelId);
+  return ch?.name || channelId;
+}
+
+function buildChannelStrip() {
+  const strip = document.getElementById('channelStrip');
+  const allPill = `<button class="ch-pill active" data-ch="all" onclick="setChannel('all')">
+    <span class="ch-dot" style="background:#888"></span>All channels
+  </button>`;
+  const pills = CHANNELS.map(c => `
+    <button class="ch-pill" data-ch="${c.id}" onclick="setChannel('${c.id}')">
+      <span class="ch-dot" style="background:${c.color}"></span>${getChannelName(c.id)}
+    </button>`).join('');
+  strip.innerHTML = allPill + pills;
+}
+
+function updateCacheNote(fromCache) {
+  const bar = document.getElementById('statsBar');
+  const note = bar.querySelector('.cache-note');
+  if (note) note.textContent = fromCache ? `cached · refreshes every ${CACHE_MINUTES}min` : 'live';
+}
+
+function renderLoading() {
+  document.getElementById('videoGrid').innerHTML = `
+    <div class="loading-state">
+      <div class="loading-dots"><span>·</span><span>·</span><span>·</span></div>
+    </div>`;
+}
+
+function renderError(msg) {
+  document.getElementById('videoGrid').innerHTML = `
+    <div class="error-state">
+      API error: ${msg}<br>
+      <small style="color:#666;font-size:12px">Check your API key and quota in Google Cloud Console</small>
+    </div>`;
+}
+
+function renderGrid(vids) {
+  const grid = document.getElementById('videoGrid');
+  if (!vids.length) {
+    grid.innerHTML = `<div class="empty-state">No videos here.</div>`;
+    return;
+  }
+
+  grid.innerHTML = vids.map(v => {
+    const ch = getChannel(v.channelId);
+    const isWatched = watched.has(v.id);
+    return `
+      <div class="video-card ${isWatched ? 'watched' : ''}" onclick="openModal('${v.id}')">
+        <div class="thumb-wrap">
+          ${v.thumb
+            ? `<img src="${v.thumb}" alt="" loading="lazy">`
+            : `<div style="width:100%;height:100%;background:var(--surface2)"></div>`}
+          ${v.duration ? `<span class="duration">${v.duration}</span>` : ''}
+          <div class="watched-badge">Watched</div>
+        </div>
+        <div class="card-body">
+          <div class="card-channel">
+            <span class="card-ch-dot" style="background:${ch.color}"></span>
+            ${v.channelName || ch.name || ch.id}
+          </div>
+          <div class="card-title">${v.title}</div>
+          <div class="card-footer">
+            <span class="card-date">${formatDate(v.publishedAt)}</span>
+            <button class="mark-btn" onclick="event.stopPropagation(); toggleWatched('${v.id}', event)">
+              ${isWatched ? 'Unwatch' : 'Mark watched'}
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function render() {
+  let vids = allVideos;
+  if (activeChannel !== 'all') vids = vids.filter(v => v.channelId === activeChannel);
+  if (activeFilter === 'unwatched') vids = vids.filter(v => !watched.has(v.id));
+  if (activeFilter === 'watched') vids = vids.filter(v => watched.has(v.id));
+
+  const base = allVideos.filter(v => activeChannel === 'all' || v.channelId === activeChannel);
+  const watchedCount = base.filter(v => watched.has(v.id)).length;
+
+  document.getElementById('statsBar').innerHTML = `
+    <em>${watchedCount}</em> of <em>${base.length}</em> watched &nbsp;·&nbsp;
+    <em>${base.length - watchedCount}</em> to go
+    <span class="cache-note" style="margin-left:auto;color:var(--text3)"></span>`;
+
+  renderGrid(vids);
+  updateCacheNote(!!loadCache());
+}
+
+
+/* ── Modal ── */
+function openModal(videoId) {
+  const v = allVideos.find(v => v.id === videoId);
+  if (!v) return;
+  const ch = getChannel(v.channelId);
+
+  document.getElementById('modalTitle').textContent = v.title;
+  document.getElementById('modalChannel').innerHTML =
+    `<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${ch.color};margin-right:5px;vertical-align:middle"></span>${v.channelName || ch.name || ch.id}`;
+  document.getElementById('modalDate').textContent = formatDate(v.publishedAt);
+  if (!watched.has(videoId)) {
+    watched.add(videoId);
+    saveWatched();
+    render();
+  }
+  window.open(`https://www.youtube.com/embed/${videoId}?autoplay=1`, '_blank');
+}
+
+/* ── Init ── */
+fetchAllVideos();
+</script>
+</body>
+</html>
