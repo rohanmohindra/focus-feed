@@ -1,0 +1,33 @@
+export default async (request, context) => {
+  if (request.method !== 'GET') {
+    return new Response('Method not allowed', { status: 405 });
+  }
+
+  const url = new URL(request.url);
+  const params = url.searchParams;
+
+  params.set('key', process.env.YOUTUBE_API_KEY);
+
+  const endpoint = params.get('_endpoint');
+  params.delete('_endpoint');
+
+  const allowedEndpoints = ['channels', 'playlistItems', 'videos'];
+  if (!allowedEndpoints.includes(endpoint)) {
+    return new Response('Invalid endpoint', { status: 400 });
+  }
+
+  const youtubeUrl = `https://www.googleapis.com/youtube/v3/${endpoint}?${params.toString()}`;
+
+  const ytResponse = await fetch(youtubeUrl);
+  const data = await ytResponse.json();
+
+  return new Response(JSON.stringify(data), {
+    status: ytResponse.status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
+};
+
+export const config = { path: '/api/youtube' };

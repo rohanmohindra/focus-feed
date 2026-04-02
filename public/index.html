@@ -7,10 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Mono&display=swap" rel="stylesheet">
 <style>
-  /* ============================================================
-     CONFIG — edit CHANNELS and API_KEY below, not here
-     ============================================================ */
-
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
@@ -292,25 +288,6 @@
   .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
   @keyframes blink { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
 
-  /* ── API key notice ── */
-  .key-notice {
-    background: #1a1500;
-    border: 0.5px solid #4a3800;
-    border-radius: var(--radius);
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 1.5rem;
-    font-size: 13px;
-    color: #c8a84b;
-    line-height: 1.7;
-  }
-  .key-notice code {
-    font-family: 'DM Mono', monospace;
-    font-size: 12px;
-    background: rgba(255,255,255,0.07);
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-
   @media (max-width: 600px) {
     .main { padding: 1rem 1rem 3rem; }
     .header { padding: 0 1rem; }
@@ -419,19 +396,14 @@
     display: none;
   }
   .watched-dot.visible { display: block; }
-
 </style>
 </head>
 <body>
 
 <!-- ============================================================
-  ✏️  CONFIGURATION — edit this section only
+  ✏️  CONFIGURATION — edit channels here
   ============================================================ -->
 <script>
-const API_KEY = 'YOUR_API_KEY_HERE'; // ← paste your YouTube Data API v3 key here
-
-// Channel names are fetched automatically from YouTube — you can remove the name field entirely.
-// It's only used as a fallback if the API call fails.
 const CHANNELS = [
   { id: 'UCHnyfMqiRRG1u-2MsSQLbXA', color: '#4CAF50' },
   { id: 'UCYO_jab_esuFRV4b17AJtAw', color: '#5C7CFA' },
@@ -442,12 +414,8 @@ const CHANNELS = [
   { id: 'UC4i_9WvfPRTuRWEaWyfKuFw', color: '#FF5252' },
 ];
 
-const VIDEOS_PER_CHANNEL = 6;   // how many recent videos to fetch per channel
-const CACHE_MINUTES = 60;        // how long to cache results before re-fetching
-
-// Video player — change this to any Invidious instance if this one goes down
-// Options: https://yewtu.be  https://inv.nadeko.net  https://invidious.nerdvpn.de
-const PLAYER_BASE = 'https://yewtu.be';
+const VIDEOS_PER_CHANNEL = 6;
+const CACHE_MINUTES = 60;
 </script>
 <!-- ============================================================ -->
 
@@ -476,28 +444,26 @@ const PLAYER_BASE = 'https://yewtu.be';
     </div>
   </div>
 
-<div class="modal-backdrop" id="modalBackdrop" onclick="closeModal(event)">
-  <div class="modal-inner" onclick="event.stopPropagation()">
-    <div class="modal-header">
-      <div>
-        <div class="modal-title" id="modalTitle"></div>
-        <div class="modal-channel" id="modalChannel"></div>
+  <div class="modal-backdrop" id="modalBackdrop" onclick="closeModal(event)">
+    <div class="modal-inner" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="modalTitle"></div>
+          <div class="modal-channel" id="modalChannel"></div>
+        </div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
       </div>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-player" id="modalPlayer"></div>
-    <div class="modal-footer">
-      <div class="modal-watched-note">
-        <span class="watched-dot" id="watchedDot"></span>
-        <span id="watchedNote"></span>
+      <div class="modal-player" id="modalPlayer"></div>
+      <div class="modal-footer">
+        <div class="modal-watched-note">
+          <span class="watched-dot" id="watchedDot"></span>
+          <span id="watchedNote"></span>
+        </div>
+        <span id="modalDate"></span>
       </div>
-      <span id="modalDate"></span>
     </div>
   </div>
-</div>
-
 </main>
-
 
 <script>
 /* ── State ── */
@@ -581,11 +547,11 @@ function clearCache() {
   try { localStorage.removeItem(CACHE_KEY); } catch(e) {}
 }
 
-/* ── API ── */
+/* ── API — calls our Netlify proxy, never YouTube directly ── */
 async function fetchChannelVideos(channel) {
-  // Step 1: get uploads playlist ID + real channel name from API
+  // Step 1: get uploads playlist ID + channel name
   const chRes = await fetch(
-    `https://www.googleapis.com/youtube/v3/channels?part=contentDetails,snippet&id=${channel.id}&key=${API_KEY}`
+    `/api/youtube?_endpoint=channels&part=contentDetails,snippet&id=${channel.id}`
   );
   const chData = await chRes.json();
 
@@ -594,25 +560,24 @@ async function fetchChannelVideos(channel) {
   const item = chData.items?.[0];
   if (!item) return [];
 
-  const resolvedName = item.snippet?.title || channel.name || channel.id;
-
+  const resolvedName = item.snippet?.title || channel.id;
   const uploadsId = item.contentDetails?.relatedPlaylists?.uploads;
   if (!uploadsId) return { name: resolvedName, videos: [] };
 
   // Step 2: get recent video IDs from uploads playlist
   const plRes = await fetch(
-    `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${uploadsId}&maxResults=${VIDEOS_PER_CHANNEL}&key=${API_KEY}`
+    `/api/youtube?_endpoint=playlistItems&part=snippet&playlistId=${uploadsId}&maxResults=${VIDEOS_PER_CHANNEL}`
   );
   const plData = await plRes.json();
   if (plData.error) throw new Error(plData.error.message);
 
   const items = plData.items || [];
   const videoIds = items.map(i => i.snippet?.resourceId?.videoId).filter(Boolean);
-  if (!videoIds.length) return [];
+  if (!videoIds.length) return { name: resolvedName, videos: [] };
 
   // Step 3: get video details (duration)
   const detRes = await fetch(
-    `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${videoIds.join(',')}&key=${API_KEY}`
+    `/api/youtube?_endpoint=videos&part=contentDetails,snippet&id=${videoIds.join(',')}`
   );
   const detData = await detRes.json();
   if (detData.error) throw new Error(detData.error.message);
@@ -629,12 +594,6 @@ async function fetchChannelVideos(channel) {
 }
 
 async function fetchAllVideos(force = false) {
-  if (API_KEY === 'YOUR_API_KEY_HERE') {
-    showKeyNotice();
-    renderGrid([]);
-    return;
-  }
-
   if (!force) {
     const cached = loadCache();
     if (cached) {
@@ -652,7 +611,7 @@ async function fetchAllVideos(force = false) {
     const results = await Promise.allSettled(CHANNELS.map(fetchChannelVideos));
     const videos = [];
     results.forEach((r, i) => {
-      if (r.status === 'fulfilled') {
+      if (r.status === 'fulfilled' && r.value.videos) {
         CHANNELS[i].name = r.value.name;
         videos.push(...r.value.videos);
       } else {
@@ -660,7 +619,6 @@ async function fetchAllVideos(force = false) {
       }
     });
 
-    // sort newest first
     videos.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
     allVideos = videos;
     saveCache(videos);
@@ -680,15 +638,6 @@ async function hardRefresh(btn) {
 }
 
 /* ── UI builders ── */
-function showKeyNotice() {
-  document.getElementById('keyNotice').innerHTML = `
-    <div class="key-notice">
-      <strong>API key needed</strong> — open this file in a text editor and replace
-      <code>YOUR_API_KEY_HERE</code> with your YouTube Data API v3 key near the top of the file.
-      Save and reload.
-    </div>`;
-}
-
 function getChannelName(channelId) {
   const fromVideos = allVideos.find(v => v.channelId === channelId);
   if (fromVideos && fromVideos.channelName) return fromVideos.channelName;
@@ -725,7 +674,7 @@ function renderError(msg) {
   document.getElementById('videoGrid').innerHTML = `
     <div class="error-state">
       API error: ${msg}<br>
-      <small style="color:#666;font-size:12px">Check your API key and quota in Google Cloud Console</small>
+      <small style="color:#666;font-size:12px">Check your API key and quota in Netlify environment variables</small>
     </div>`;
 }
 
@@ -783,7 +732,6 @@ function render() {
   updateCacheNote(!!loadCache());
 }
 
-
 /* ── Modal ── */
 function openModal(videoId) {
   const v = allVideos.find(v => v.id === videoId);
@@ -794,12 +742,21 @@ function openModal(videoId) {
   document.getElementById('modalChannel').innerHTML =
     `<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${ch.color};margin-right:5px;vertical-align:middle"></span>${v.channelName || ch.name || ch.id}`;
   document.getElementById('modalDate').textContent = formatDate(v.publishedAt);
+  document.getElementById('modalPlayer').innerHTML =
+    `<iframe src="https://www.youtube.com/embed/${videoId}?autoplay=1" allowfullscreen allow="autoplay"></iframe>`;
+  document.getElementById('modalBackdrop').classList.add('open');
+
   if (!watched.has(videoId)) {
     watched.add(videoId);
     saveWatched();
     render();
   }
-  window.open(`https://www.youtube.com/embed/${videoId}?autoplay=1`, '_blank');
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modalBackdrop')) return;
+  document.getElementById('modalBackdrop').classList.remove('open');
+  document.getElementById('modalPlayer').innerHTML = '';
 }
 
 /* ── Init ── */
