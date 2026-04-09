@@ -30,6 +30,14 @@ export default async (request, context) => {
   const ytResponse = await fetch(youtubeUrl);
   const data = await ytResponse.json();
 
+  // Filter Shorts out of video detail responses
+  if (endpoint === 'videos' && data.items) {
+    data.items = data.items.filter(v => {
+      const secs = isoToSeconds(v.contentDetails?.duration);
+      return secs >= 60;
+    });
+  }
+
   return new Response(JSON.stringify(data), {
     status: ytResponse.status,
     headers: {
