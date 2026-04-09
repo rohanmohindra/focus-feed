@@ -1,3 +1,12 @@
+function isoToSeconds(iso) {
+  if (!iso) return 0;
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  return (parseInt(m[1] || 0) * 3600) +
+         (parseInt(m[2] || 0) * 60) +
+          parseInt(m[3] || 0);
+}
+
 export default async (request, context) => {
   if (request.method !== 'GET') {
     return new Response('Method not allowed', { status: 405 });
