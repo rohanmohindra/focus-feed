@@ -733,6 +733,9 @@ function render() {
 }
 
 /* ── Modal ── */
+let watchedTimer = null;
+const WATCHED_DELAY_MS = 10000; // 10 seconds — change to taste
+
 function openModal(videoId) {
   const v = allVideos.find(v => v.id === videoId);
   if (!v) return;
@@ -746,17 +749,37 @@ function openModal(videoId) {
     `<iframe src="https://www.youtube.com/embed/${videoId}?autoplay=1" allowfullscreen allow="autoplay"></iframe>`;
   document.getElementById('modalBackdrop').classList.add('open');
 
+  // Start the watched timer (only if not already watched)
   if (!watched.has(videoId)) {
-    watched.add(videoId);
-    saveWatched();
-    render();
+    const dot = document.getElementById('watchedDot');
+    const note = document.getElementById('watchedNote');
+    note.textContent = 'Marking as watched in 10s…';
+    dot.classList.remove('visible');
+
+    watchedTimer = setTimeout(() => {
+      watched.add(videoId);
+      saveWatched();
+      render();
+      note.textContent = 'Marked as watched';
+      dot.classList.add('visible');
+    }, WATCHED_DELAY_MS);
+  } else {
+    document.getElementById('watchedNote').textContent = 'Already watched';
+    document.getElementById('watchedDot').classList.add('visible');
   }
 }
 
 function closeModal(e) {
   if (e && e.target !== document.getElementById('modalBackdrop')) return;
+  
+  // Cancel the timer if the user closes before it fires
+  clearTimeout(watchedTimer);
+  watchedTimer = null;
+
   document.getElementById('modalBackdrop').classList.remove('open');
   document.getElementById('modalPlayer').innerHTML = '';
+  document.getElementById('watchedNote').textContent = '';
+  document.getElementById('watchedDot').classList.remove('visible');
 }
 
 document.addEventListener('keydown', e => {
