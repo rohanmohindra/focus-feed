@@ -760,7 +760,7 @@ function openModal(videoId) {
       watched.add(videoId);
       saveWatched();
       render();
-      note.textContent = 'Marked as watched';
+      note.textContent = 'Watched';
       dot.classList.add('visible');
     }, WATCHED_DELAY_MS);
   } else {
