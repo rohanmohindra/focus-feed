@@ -759,6 +759,13 @@ function closeModal(e) {
   document.getElementById('modalPlayer').innerHTML = '';
 }
 
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.getElementById('modalBackdrop').classList.remove('open');
+    document.getElementById('modalPlayer').innerHTML = '';
+  }
+});
+
 /* ── Init ── */
 fetchAllVideos();
 </script>
