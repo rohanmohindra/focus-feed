@@ -34,7 +34,7 @@ export default async (request, context) => {
   if (endpoint === 'videos' && data.items) {
     data.items = data.items.filter(v => {
       const secs = isoToSeconds(v.contentDetails?.duration);
-      return secs >= 60;
+      return secs >= 150; // Filter out videos shorter than 2.5 minutes
     });
   }
 
