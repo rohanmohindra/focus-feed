@@ -20,7 +20,10 @@ export default async (request, context) => {
   const endpoint = params.get('_endpoint');
   params.delete('_endpoint');
 
-  const allowedEndpoints = ['channels', 'playlistItems', 'videos'];
+  // 'search' costs 100 units/call and must only be used on explicit user action.
+  // NOTE: removing the channelId param in the frontend would open results to all of YouTube —
+  // the proxy intentionally does not enforce channelId, so the frontend must pass it.
+  const allowedEndpoints = ['channels', 'playlistItems', 'videos', 'search'];
   if (!allowedEndpoints.includes(endpoint)) {
     return new Response('Invalid endpoint', { status: 400 });
   }

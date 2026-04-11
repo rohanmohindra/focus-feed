@@ -288,6 +288,70 @@
   .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
   @keyframes blink { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
 
+  /* ── Search ── */
+  .search-form {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+  }
+
+  .search-input {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 0.5px solid var(--border2);
+    background: var(--surface2);
+    color: var(--text);
+    width: 150px;
+    outline: none;
+    transition: border-color 0.15s, width 0.2s;
+  }
+  .search-input:focus { border-color: rgba(255,255,255,0.3); width: 190px; }
+  .search-input::placeholder { color: var(--text3); }
+
+  .search-submit-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 5px 13px;
+    border-radius: 20px;
+    border: 0.5px solid var(--border2);
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .search-submit-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.25); }
+
+  .clear-search-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 5px 13px;
+    border-radius: 20px;
+    border: 0.5px solid var(--border2);
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: none;
+  }
+  .clear-search-btn.visible { display: block; }
+  .clear-search-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.25); }
+
+  /* ── Search label (below channel strip) ── */
+  .search-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+    margin-bottom: 1rem;
+    display: none;
+    align-items: center;
+    gap: 8px;
+  }
+  .search-label.visible { display: flex; }
+  .search-label em { color: var(--text2); font-style: normal; }
+
   @media (max-width: 600px) {
     .main { padding: 1rem 1rem 3rem; }
     .header { padding: 0 1rem; }
@@ -430,6 +494,11 @@ const CACHE_MINUTES = 60;
       <button class="filter-btn" onclick="setFilter('unwatched', this)">Unwatched</button>
       <button class="filter-btn" onclick="setFilter('watched', this)">Watched</button>
       <button class="refresh-btn" onclick="hardRefresh(this)" title="Refresh feed">↻</button>
+      <form class="search-form" id="searchForm" onsubmit="doSearch(event)">
+        <input class="search-input" type="search" id="searchInput" placeholder="Search channels…" autocomplete="off">
+        <button class="search-submit-btn" type="submit">Search</button>
+        <button class="clear-search-btn" id="clearSearchBtn" type="button" onclick="clearSearch()">✕ Feed</button>
+      </form>
     </div>
   </div>
 </header>
@@ -437,6 +506,7 @@ const CACHE_MINUTES = 60;
 <main class="main">
   <div id="keyNotice"></div>
   <div class="channel-strip" id="channelStrip"></div>
+  <div class="search-label" id="searchLabel"></div>
   <div class="stats-bar" id="statsBar"></div>
   <div class="video-grid" id="videoGrid">
     <div class="loading-state">
@@ -471,6 +541,8 @@ let allVideos = [];
 let watched = new Set(JSON.parse(localStorage.getItem('ff_watched') || '[]'));
 let activeChannel = 'all';
 let activeFilter = 'all';
+let searchResults = null; // null = feed mode, array = search mode
+let searchQuery = '';
 
 /* ── Helpers ── */
 function saveWatched() {
@@ -723,6 +795,12 @@ function renderGrid(vids) {
 }
 
 function render() {
+  // In search mode, just re-render search results (e.g. watched state changed)
+  if (searchResults !== null) {
+    renderGrid(searchResults);
+    return;
+  }
+
   let vids = allVideos;
   if (activeChannel !== 'all') vids = vids.filter(v => v.channelId === activeChannel);
   if (activeFilter === 'unwatched') vids = vids.filter(v => !watched.has(v.id));
@@ -740,12 +818,78 @@ function render() {
   updateCacheNote(!!loadCache());
 }
 
+/* ── Focused Search ── */
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function doSearch(e) {
+  e.preventDefault();
+  const query = document.getElementById('searchInput').value.trim();
+  if (!query) return;
+  searchQuery = query;
+
+  renderLoading();
+  const label = document.getElementById('searchLabel');
+  label.innerHTML = `Searching for "<em>${escHtml(query)}</em>"…`;
+  label.className = 'search-label visible';
+  document.getElementById('clearSearchBtn').classList.add('visible');
+
+  // One search call per channel, scoped by channelId — 100 units each, user-triggered only.
+  // Removing channelId here would search all of YouTube; the proxy does not enforce it.
+  const results = await Promise.allSettled(
+    CHANNELS.map(ch =>
+      fetch(`/api/youtube?_endpoint=search&part=snippet&q=${encodeURIComponent(query)}&channelId=${ch.id}&type=video&maxResults=3&order=relevance`)
+        .then(r => r.json())
+    )
+  );
+
+  const videos = [];
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled' && r.value.items) {
+      r.value.items.forEach(item => {
+        const ch = CHANNELS[i];
+        videos.push({
+          id: item.id.videoId,
+          channelId: ch.id,
+          channelName: ch.name || ch.id,
+          title: item.snippet.title,
+          thumb: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
+          publishedAt: item.snippet.publishedAt,
+          duration: '',
+        });
+      });
+    } else if (r.status === 'rejected') {
+      console.warn('Search failed for channel', CHANNELS[i].id, r.reason);
+    }
+  });
+
+  // Sort by date, cap at 3
+  videos.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  searchResults = videos.slice(0, 3);
+
+  const count = searchResults.length;
+  label.innerHTML = `<em>${count}</em> result${count !== 1 ? 's' : ''} for "<em>${escHtml(searchQuery)}</em>"`;
+
+  renderGrid(searchResults);
+}
+
+function clearSearch() {
+  searchResults = null;
+  searchQuery = '';
+  document.getElementById('searchInput').value = '';
+  document.getElementById('searchLabel').className = 'search-label';
+  document.getElementById('clearSearchBtn').classList.remove('visible');
+  render();
+}
+
 /* ── Modal ── */
 let watchedTimer = null;
 const WATCHED_DELAY_MS = 10000; // 10 seconds — change to taste
 
 function openModal(videoId) {
-  const v = allVideos.find(v => v.id === videoId);
+  // Check feed first (has duration); fall back to search results
+  const v = allVideos.find(v => v.id === videoId) || (searchResults || []).find(v => v.id === videoId);
   if (!v) return;
   const ch = getChannel(v.channelId);
 
