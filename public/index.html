@@ -485,7 +485,7 @@ const CACHE_MINUTES = 60;
 
 <header class="header">
   <div class="header-inner">
-    <div class="logo">
+    <div class="logo" onclick="goHome()" style="cursor:pointer">
       <div class="logo-mark"></div>
       <span class="logo-text">Focus Feed</span>
     </div>
@@ -883,6 +883,11 @@ async function doSearch(e) {
   label.innerHTML = `<em>${count}</em> result${count !== 1 ? 's' : ''} for "<em>${escHtml(searchQuery)}</em>"`;
 
   renderGrid(searchResults);
+}
+
+function goHome() {
+  clearSearch();
+  setChannel('all');
 }
 
 function clearSearch() {
