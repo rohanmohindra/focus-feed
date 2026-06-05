@@ -359,6 +359,120 @@
     .video-grid { grid-template-columns: 1fr; }
   }
 
+  /* ── Onboarding overlay ── */
+  .onboarding-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: var(--bg);
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    overflow-y: auto;
+  }
+  .onboarding-backdrop.open { display: flex; }
+
+  .onboarding-inner {
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding: 2rem 0;
+  }
+
+  .onboarding-head { display: flex; flex-direction: column; gap: 6px; }
+
+  .onboarding-title {
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+
+  .onboarding-sub {
+    font-size: 13px;
+    color: var(--text3);
+    line-height: 1.5;
+  }
+
+  .onboarding-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .onboarding-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+  }
+  .onboarding-card:hover { border-color: var(--border2); }
+  .onboarding-card.selected {
+    border-color: rgba(255,255,255,0.35);
+    background: var(--surface2);
+  }
+
+  .onboarding-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .onboarding-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text2);
+    flex: 1;
+    transition: color 0.15s;
+  }
+  .onboarding-card.selected .onboarding-name { color: var(--text); }
+
+  .onboarding-check {
+    font-size: 13px;
+    color: var(--text3);
+    transition: color 0.15s;
+    flex-shrink: 0;
+  }
+  .onboarding-card.selected .onboarding-check { color: var(--text); }
+
+  .onboarding-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .onboarding-count {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text3);
+  }
+  .onboarding-count em { color: var(--text2); font-style: normal; }
+
+  .onboarding-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 9px 24px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: var(--text);
+    color: #0f0f0f;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .onboarding-btn:disabled { opacity: 0.3; cursor: default; }
+  .onboarding-btn:not(:disabled):hover { opacity: 0.88; }
+
   /* ── Auth screen ── */
   .auth-screen {
     position: fixed;
@@ -569,13 +683,13 @@
   ============================================================ -->
 <script>
 const CHANNELS = [
-  { id: 'UCHnyfMqiRRG1u-2MsSQLbXA', color: '#4CAF50', maxResults: 12}, // veritasium
-  { id: 'UCYO_jab_esuFRV4b17AJtAw', color: '#5C7CFA', maxResults: 12 }, // 3blue1brown
-  { id: 'UCNAf1k0yIjyGu3k9BwAg3lg', color: '#FF9800', maxResults: 20, titleFilter: 'highlights' }, // sky sports pl
-  { id: 'UCUyvQV2JsICeLZP4c_h40kA', color: '#E53935' }, // thomas flight
-  { id: 'UCtYKe7-XbaDjpUwcU5x0bLg', color: '#00BCD4' }, // neo
-  { id: 'UCJkMlOu7faDgqh4PfzbpLdg', color: '#AB47BC' }, // nerdwriter
-  { id: 'UC4i_9WvfPRTuRWEaWyfKuFw', color: '#FF5252', maxResults: 20, titleFilter: 'highlights' }, // tnt sports football
+  { id: 'UCHnyfMqiRRG1u-2MsSQLbXA', name: 'Veritasium',         color: '#4CAF50', maxResults: 12 },
+  { id: 'UCYO_jab_esuFRV4b17AJtAw', name: '3Blue1Brown',        color: '#5C7CFA', maxResults: 12 },
+  { id: 'UCNAf1k0yIjyGu3k9BwAg3lg', name: 'Sky Sports Football', color: '#FF9800', maxResults: 20, titleFilter: 'highlights' },
+  { id: 'UCUyvQV2JsICeLZP4c_h40kA', name: 'Thomas Flight',      color: '#E53935' },
+  { id: 'UCtYKe7-XbaDjpUwcU5x0bLg', name: 'Neo',                color: '#00BCD4' },
+  { id: 'UCJkMlOu7faDgqh4PfzbpLdg', name: 'Nerdwriter',         color: '#AB47BC' },
+  { id: 'UC4i_9WvfPRTuRWEaWyfKuFw', name: 'TNT Sports Football', color: '#FF5252', maxResults: 20, titleFilter: 'highlights' },
 ];
 
 const VIDEOS_PER_CHANNEL = 6;
@@ -593,6 +707,7 @@ const CACHE_MINUTES = 60;
       <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
       <button class="filter-btn" onclick="setFilter('unwatched', this)">Unwatched</button>
       <button class="filter-btn" onclick="setFilter('watched', this)">Watched</button>
+      <button class="filter-btn" onclick="openOnboarding(true)" id="manageChannelsBtn" style="display:none">Channels</button>
       <button class="refresh-btn" onclick="hardRefresh(this)" title="Refresh feed">↻</button>
       <button class="filter-btn" id="logoutBtn" style="display:none; margin-left:8px" onclick="handleLogout()">Sign out</button>
       <form class="search-form" id="searchForm" onsubmit="doSearch(event)">
@@ -636,6 +751,26 @@ const CACHE_MINUTES = 60;
   </div>
 </main>
 
+<!-- ── Onboarding overlay ── -->
+<div class="onboarding-backdrop" id="onboardingBackdrop">
+  <div class="onboarding-inner">
+    <div class="onboarding-head">
+      <div class="logo" style="margin-bottom:8px">
+        <div class="logo-mark"></div>
+        <span class="logo-text">Focus Feed</span>
+      </div>
+      <div class="onboarding-title" id="onboardingTitle">Choose your channels</div>
+      <div class="onboarding-sub" id="onboardingSubtitle">Pick the creators you want in your feed. You can change this anytime.</div>
+    </div>
+    <div class="onboarding-grid" id="onboardingGrid"></div>
+    <div class="onboarding-footer">
+      <div class="onboarding-count" id="onboardingCount"></div>
+      <button class="onboarding-btn" id="onboardingBtn" onclick="confirmOnboarding()" disabled>Start watching</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Auth screen ── -->
 <div class="auth-screen" id="authScreen">
   <div class="auth-card">
     <div class="auth-logo">
@@ -662,6 +797,95 @@ const CACHE_MINUTES = 60;
 </div>
 
 <script>
+/* ── Selected channels (onboarding) ── */
+const SELECTED_KEY = 'ff_selected_channels';
+
+function loadSelectedChannels() {
+  try {
+    const raw = localStorage.getItem(SELECTED_KEY);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch(e) {}
+  return null; // null = never been set (first visit)
+}
+
+function saveSelectedChannels(ids) {
+  try { localStorage.setItem(SELECTED_KEY, JSON.stringify([...ids])); } catch(e) {}
+}
+
+function getActiveChannels() {
+  const selected = loadSelectedChannels();
+  if (!selected || selected.size === 0) return CHANNELS; // fallback: all
+  return CHANNELS.filter(c => selected.has(c.id));
+}
+
+let onboardingSelected = new Set();
+let onboardingIsManage = false; // true when opened from header (not first visit)
+
+function openOnboarding(isManage = false) {
+  onboardingIsManage = isManage;
+  const existing = loadSelectedChannels();
+
+  // Pre-populate with existing selections (or all if first visit)
+  onboardingSelected = existing ? new Set(existing) : new Set(CHANNELS.map(c => c.id));
+
+  // Update title/button text for manage vs first-visit mode
+  document.getElementById('onboardingTitle').textContent = isManage ? 'Manage channels' : 'Choose your channels';
+  document.getElementById('onboardingSubtitle').textContent = isManage
+    ? 'Add or remove channels from your feed.'
+    : 'Pick the creators you want in your feed. You can change this anytime.';
+  document.getElementById('onboardingBtn').textContent = isManage ? 'Save changes' : 'Start watching';
+
+  const grid = document.getElementById('onboardingGrid');
+  grid.innerHTML = CHANNELS.map(ch => `
+    <div class="onboarding-card ${onboardingSelected.has(ch.id) ? 'selected' : ''}"
+         data-id="${ch.id}"
+         onclick="toggleOnboardingChannel('${ch.id}', this)">
+      <span class="onboarding-dot" style="background:${ch.color}"></span>
+      <span class="onboarding-name">${ch.name}</span>
+      <span class="onboarding-check">${onboardingSelected.has(ch.id) ? '✓' : ''}</span>
+    </div>`).join('');
+
+  updateOnboardingCount();
+  document.getElementById('onboardingBackdrop').classList.add('open');
+}
+
+function toggleOnboardingChannel(id, el) {
+  if (onboardingSelected.has(id)) {
+    onboardingSelected.delete(id);
+    el.classList.remove('selected');
+    el.querySelector('.onboarding-check').textContent = '';
+  } else {
+    onboardingSelected.add(id);
+    el.classList.add('selected');
+    el.querySelector('.onboarding-check').textContent = '✓';
+  }
+  updateOnboardingCount();
+}
+
+function updateOnboardingCount() {
+  const n = onboardingSelected.size;
+  document.getElementById('onboardingCount').innerHTML =
+    `<em>${n}</em> channel${n !== 1 ? 's' : ''} selected`;
+  document.getElementById('onboardingBtn').disabled = n === 0;
+}
+
+function confirmOnboarding() {
+  saveSelectedChannels(onboardingSelected);
+  document.getElementById('onboardingBackdrop').classList.remove('open');
+
+  if (onboardingIsManage) {
+    // Selections changed — clear cache and re-fetch with new channel set
+    clearCache();
+    allVideos = [];
+    activeChannel = 'all';
+    fetchAllVideos(true);
+  } else {
+    // First visit — kick off the feed
+    feedInitialised = true;
+    fetchAllVideos();
+  }
+}
+
 /* ── State ── */
 let allVideos = [];
 let watched = new Set(JSON.parse(localStorage.getItem('ff_watched') || '[]'));
@@ -825,11 +1049,11 @@ async function fetchAllVideos(force = false) {
   renderLoading();
 
   try {
-    const results = await Promise.allSettled(CHANNELS.map(fetchChannelVideos));
+    const results = await Promise.allSettled(getActiveChannels().map(fetchChannelVideos));
     const videos = [];
     results.forEach((r, i) => {
       if (r.status === 'fulfilled' && r.value.videos) {
-        CHANNELS[i].name = r.value.name;
+        getActiveChannels()[i].name = r.value.name;
         videos.push(...r.value.videos);
       } else {
         console.warn('Failed to fetch', CHANNELS[i].id, r.reason);
@@ -867,7 +1091,7 @@ function buildChannelStrip() {
   const allPill = `<button class="ch-pill active" data-ch="all" onclick="setChannel('all')">
     <span class="ch-dot" style="background:#888"></span>All channels
   </button>`;
-  const pills = CHANNELS.map(c => `
+  const pills = getActiveChannels().map(c => `
     <button class="ch-pill" data-ch="${c.id}" onclick="setChannel('${c.id}')">
       <span class="ch-dot" style="background:${c.color}"></span>${getChannelName(c.id)}
     </button>`).join('');
@@ -1097,8 +1321,17 @@ function showAuth() {
 function showFeed(user) {
   document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('logoutBtn').style.display = '';
+  document.getElementById('manageChannelsBtn').style.display = '';
   document.querySelector('.main').style.display = '';
   ensureUserRow(user);
+
+  const selected = loadSelectedChannels();
+  if (!selected || selected.size === 0) {
+    // First visit — show onboarding before fetching anything
+    openOnboarding(false);
+    return;
+  }
+
   if (!feedInitialised) {
     feedInitialised = true;
     fetchAllVideos();
