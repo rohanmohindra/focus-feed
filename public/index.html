@@ -6,6 +6,7 @@
 <title>Focus Feed</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=DM+Mono&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -358,6 +359,105 @@
     .video-grid { grid-template-columns: 1fr; }
   }
 
+  /* ── Auth screen ── */
+  .auth-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+  .auth-screen.hidden { display: none; }
+
+  .auth-card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--surface);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .auth-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .auth-heading {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+
+  .auth-sub {
+    font-size: 13px;
+    color: var(--text3);
+    margin-top: 2px;
+  }
+
+  .auth-tabs {
+    display: flex;
+    gap: 6px;
+  }
+
+  .auth-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .auth-input {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border2);
+    background: var(--surface2);
+    color: var(--text);
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .auth-input:focus { border-color: rgba(255,255,255,0.3); }
+  .auth-input::placeholder { color: var(--text3); }
+
+  #authForm {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .auth-error {
+    font-size: 12px;
+    color: var(--red);
+    min-height: 16px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .auth-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 9px 16px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: var(--text);
+    color: #0f0f0f;
+    cursor: pointer;
+    width: 100%;
+    transition: opacity 0.15s;
+  }
+  .auth-btn:hover { opacity: 0.88; }
+  .auth-btn:disabled { opacity: 0.5; cursor: default; }
+
   /* ── Modal ── */
   .modal-backdrop {
     display: none;
@@ -494,6 +594,7 @@ const CACHE_MINUTES = 60;
       <button class="filter-btn" onclick="setFilter('unwatched', this)">Unwatched</button>
       <button class="filter-btn" onclick="setFilter('watched', this)">Watched</button>
       <button class="refresh-btn" onclick="hardRefresh(this)" title="Refresh feed">↻</button>
+      <button class="filter-btn" id="logoutBtn" style="display:none; margin-left:8px" onclick="handleLogout()">Sign out</button>
       <form class="search-form" id="searchForm" onsubmit="doSearch(event)">
         <input class="search-input" type="search" id="searchInput" placeholder="Search channels…" autocomplete="off">
         <button class="search-submit-btn" type="submit">Search</button>
@@ -503,7 +604,7 @@ const CACHE_MINUTES = 60;
   </div>
 </header>
 
-<main class="main">
+<main class="main" style="display:none">
   <div id="keyNotice"></div>
   <div class="channel-strip" id="channelStrip"></div>
   <div class="search-label" id="searchLabel"></div>
@@ -534,6 +635,31 @@ const CACHE_MINUTES = 60;
     </div>
   </div>
 </main>
+
+<div class="auth-screen" id="authScreen">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="logo-mark"></div>
+      <span class="logo-text">Focus Feed</span>
+    </div>
+    <div>
+      <div class="auth-heading" id="authHeading">Sign in</div>
+      <div class="auth-sub">Your distraction-free YouTube feed</div>
+    </div>
+    <div class="auth-tabs">
+      <button class="filter-btn active" id="tabLogin" onclick="setAuthMode('login')">Sign in</button>
+      <button class="filter-btn" id="tabSignup" onclick="setAuthMode('signup')">Create account</button>
+    </div>
+    <form id="authForm" onsubmit="handleAuth(event)">
+      <div class="auth-fields">
+        <input class="auth-input" type="email" id="authEmail" placeholder="Email" autocomplete="email" required>
+        <input class="auth-input" type="password" id="authPassword" placeholder="Password" autocomplete="current-password" required>
+      </div>
+      <div class="auth-error" id="authError"></div>
+      <button class="auth-btn" type="submit" id="authSubmit">Sign in</button>
+    </form>
+  </div>
+</div>
 
 <script>
 /* ── State ── */
@@ -957,8 +1083,121 @@ document.addEventListener('keydown', e => {
   }
 });
 
+/* ── Auth ── */
+let supabaseClient = null;
+let authMode = 'login';
+let feedInitialised = false;
+
+function showAuth() {
+  document.getElementById('authScreen').classList.remove('hidden');
+  document.getElementById('logoutBtn').style.display = 'none';
+  document.querySelector('.main').style.display = 'none';
+}
+
+function showFeed(user) {
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('logoutBtn').style.display = '';
+  document.querySelector('.main').style.display = '';
+  ensureUserRow(user);
+  if (!feedInitialised) {
+    feedInitialised = true;
+    fetchAllVideos();
+  }
+}
+
+async function ensureUserRow(user) {
+  try {
+    await supabaseClient.from('users').upsert(
+      { id: user.id, email: user.email },
+      { onConflict: 'id' }
+    );
+  } catch(e) {
+    console.warn('Could not upsert user row', e);
+  }
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const isLogin = mode === 'login';
+  document.getElementById('tabLogin').classList.toggle('active', isLogin);
+  document.getElementById('tabSignup').classList.toggle('active', !isLogin);
+  document.getElementById('authHeading').textContent = isLogin ? 'Sign in' : 'Create account';
+  document.getElementById('authSubmit').textContent = isLogin ? 'Sign in' : 'Create account';
+  document.getElementById('authError').textContent = '';
+  document.getElementById('authPassword').autocomplete = isLogin ? 'current-password' : 'new-password';
+}
+
+async function handleAuth(e) {
+  e.preventDefault();
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const btn = document.getElementById('authSubmit');
+  const errorEl = document.getElementById('authError');
+
+  btn.disabled = true;
+  errorEl.textContent = '';
+  errorEl.style.color = 'var(--red)';
+
+  try {
+    let result;
+    if (authMode === 'login') {
+      result = await supabaseClient.auth.signInWithPassword({ email, password });
+    } else {
+      result = await supabaseClient.auth.signUp({ email, password });
+    }
+
+    if (result.error) {
+      errorEl.textContent = result.error.message;
+    } else if (authMode === 'signup' && !result.data.session) {
+      // Email confirmation required
+      errorEl.style.color = 'var(--text2)';
+      errorEl.textContent = 'Check your email to confirm your account.';
+    } else {
+      showFeed(result.data.user);
+    }
+  } catch(err) {
+    errorEl.textContent = 'Something went wrong. Please try again.';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function handleLogout() {
+  if (supabaseClient) await supabaseClient.auth.signOut();
+  feedInitialised = false;
+  allVideos = [];
+  clearCache();
+  showAuth();
+}
+
 /* ── Init ── */
-fetchAllVideos();
+async function initApp() {
+  try {
+    const res = await fetch('/api/config');
+    const { supabaseUrl, supabaseAnonKey } = await res.json();
+    const { createClient } = supabase;
+    supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session && !feedInitialised) {
+        showFeed(session.user);
+      }
+    });
+
+    const { data } = await supabaseClient.auth.getSession();
+    if (data.session) {
+      showFeed(data.session.user);
+    } else {
+      showAuth();
+    }
+  } catch(err) {
+    console.error('Failed to initialise app', err);
+    // Fall through to show auth screen so user isn't stuck on a blank page
+    showAuth();
+  }
+}
+
+initApp();
 </script>
 </body>
 </html>
