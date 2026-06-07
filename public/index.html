@@ -871,6 +871,7 @@ function updateOnboardingCount() {
 
 function confirmOnboarding() {
   saveSelectedChannels(onboardingSelected);
+  saveChannelsToSupabase(onboardingSelected); // fire-and-forget
   document.getElementById('onboardingBackdrop').classList.remove('open');
 
   if (onboardingIsManage) {
@@ -901,7 +902,13 @@ function saveWatched() {
 
 function toggleWatched(id, e) {
   e.stopPropagation();
-  watched.has(id) ? watched.delete(id) : watched.add(id);
+  if (watched.has(id)) {
+    watched.delete(id);
+    removeWatchedFromSupabase(id);
+  } else {
+    watched.add(id);
+    markWatchedInSupabase(id);
+  }
   saveWatched();
   render();
 }
@@ -1277,6 +1284,7 @@ function openModal(videoId) {
     watchedTimer = setTimeout(() => {
       watched.add(videoId);
       saveWatched();
+      markWatchedInSupabase(videoId);
       render();
       note.textContent = 'Watched';
       dot.classList.add('visible');
@@ -1309,6 +1317,7 @@ document.addEventListener('keydown', e => {
 
 /* ── Auth ── */
 let supabaseClient = null;
+let currentUser = null;
 let authMode = 'login';
 let feedInitialised = false;
 
@@ -1318,14 +1327,19 @@ function showAuth() {
   document.querySelector('.main').style.display = 'none';
 }
 
-function showFeed(user) {
+async function showFeed(user) {
   document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('logoutBtn').style.display = '';
   document.getElementById('manageChannelsBtn').style.display = '';
   document.querySelector('.main').style.display = '';
+  currentUser = user;
   ensureUserRow(user);
 
-  const selected = loadSelectedChannels();
+  // Load channel selections from Supabase first; fall back to localStorage
+  const supabaseChannels = await syncChannelsFromSupabase();
+  syncWatchedFromSupabase(); // fire-and-forget
+
+  const selected = supabaseChannels || loadSelectedChannels();
   if (!selected || selected.size === 0) {
     // First visit — show onboarding before fetching anything
     openOnboarding(false);
@@ -1347,6 +1361,56 @@ async function ensureUserRow(user) {
   } catch(e) {
     console.warn('Could not upsert user row', e);
   }
+}
+
+/* ── Supabase sync helpers ── */
+
+async function syncWatchedFromSupabase() {
+  if (!currentUser || !supabaseClient) return;
+  try {
+    const { data } = await supabaseClient
+      .from('watched_videos').select('video_id').eq('user_id', currentUser.id);
+    if (data) { data.forEach(r => watched.add(r.video_id)); saveWatched(); }
+  } catch(e) { console.warn('Could not load watch history', e); }
+}
+
+function markWatchedInSupabase(videoId) {
+  if (!currentUser || !supabaseClient) return;
+  supabaseClient.from('watched_videos')
+    .upsert({ user_id: currentUser.id, video_id: videoId, watched_at: new Date().toISOString() }, { onConflict: 'user_id,video_id' })
+    .catch(e => console.warn('Could not save watched video', e));
+}
+
+function removeWatchedFromSupabase(videoId) {
+  if (!currentUser || !supabaseClient) return;
+  supabaseClient.from('watched_videos')
+    .delete().eq('user_id', currentUser.id).eq('video_id', videoId)
+    .catch(e => console.warn('Could not remove watched video', e));
+}
+
+async function syncChannelsFromSupabase() {
+  if (!currentUser || !supabaseClient) return null;
+  try {
+    const { data } = await supabaseClient
+      .from('user_channels').select('channel_id').eq('user_id', currentUser.id);
+    if (data && data.length > 0) {
+      const ids = new Set(data.map(r => r.channel_id));
+      saveSelectedChannels(ids); // keep localStorage in sync as local cache
+      return ids;
+    }
+  } catch(e) { console.warn('Could not load channel selections', e); }
+  return null;
+}
+
+async function saveChannelsToSupabase(ids) {
+  if (!currentUser || !supabaseClient) return;
+  try {
+    await supabaseClient.from('user_channels').delete().eq('user_id', currentUser.id);
+    if (ids.size > 0) {
+      const rows = [...ids].map(id => ({ user_id: currentUser.id, channel_id: id, followed_at: new Date().toISOString() }));
+      await supabaseClient.from('user_channels').insert(rows);
+    }
+  } catch(e) { console.warn('Could not save channel selections', e); }
 }
 
 function setAuthMode(mode) {
@@ -1397,8 +1461,10 @@ async function handleAuth(e) {
 
 async function handleLogout() {
   if (supabaseClient) await supabaseClient.auth.signOut();
+  currentUser = null;
   feedInitialised = false;
   allVideos = [];
+  watched = new Set(); // reset so a different user's session starts clean
   clearCache();
   showAuth();
 }
